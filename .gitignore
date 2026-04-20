@@ -9,8 +9,10 @@ __pycache__/
 .vscode/
 
 # resources
+resources/happiness_project/
 resources/
 
 # data
 assignments_03/spambase.data
 assignments_03/spambase.names
+

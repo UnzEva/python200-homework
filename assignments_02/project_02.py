@@ -8,7 +8,7 @@ import numpy as np
 # The student_performance_math.csv file uses a semicolon (;) as the separator, so pd.read_csv() needs sep=";" instead of the default comma separator.
 
 # Task 1: Load and Explore
-df = pd.read_csv("student_performance_math.csv", sep=";")
+df = pd.read_csv("assignments_02/student_performance_math.csv", sep=";")
 
 print("Shape:")
 print(df.shape)
@@ -24,7 +24,7 @@ plt.hist(df["G3"], bins=21)
 plt.title("Distribution of Final Math Grades")
 plt.xlabel("G3")
 plt.ylabel("Frequency")
-plt.savefig("outputs/g3_distribution.png")
+plt.savefig("assignments_02/outputs/g3_distribution.png")
 plt.close()
 
 # The table has loaded;
@@ -126,7 +126,7 @@ plt.scatter(df_clean["failures"], df_clean["G3"])
 plt.title("G3 vs Failures")
 plt.xlabel("Failures")
 plt.ylabel("G3")
-plt.savefig("outputs/g3_vs_failures.png")
+plt.savefig("assignments_02/outputs/g3_vs_failures.png")
 plt.close()
 
 # This plot shows a negative relationship: students with more past failures tend to have lower final grades.
@@ -136,7 +136,7 @@ plt.scatter(df_clean["studytime"], df_clean["G3"])
 plt.title("G3 vs Study Time")
 plt.xlabel("Study Time")
 plt.ylabel("G3")
-plt.savefig("outputs/g3_vs_studytime.png")
+plt.savefig("assignments_02/outputs/g3_vs_studytime.png")
 plt.close()
 
 # This plot suggests a positive relationship: students who study more tend to have somewhat higher final grades,
@@ -168,9 +168,9 @@ print(f"Slope: {baseline_model.coef_[0]}")
 print(f"RMSE: {rmse_base}")
 print(f"R^2: {r2_base}")
 
-# The slope =  -1.43 shows how much the predicted final grade changes for each additional past failure. 
-# The RMSE = 2.96 tells us the typical prediction error in grade points. The typical model error is nearly 3 points on a 0–20 scale.
-# R^2 ≈ 0.089. A model based solely on the "failures" variable explains only a very small portion of the variation in the final grade.
+# The slope of -1.4275 means that each additional past failure is associated with about a 1.43-point decrease in predicted G3.
+# The RMSE of 2.9617 means the model is typically off by about 2.96 grade points on a 0-20 scale, which is a fairly large prediction error.
+# The test R^2 of 0.0895 means this baseline model explains only a small fraction of the variation in final grades.
 
 # ----------------------------------------------------------------------------------
 # Task 5: Build the Full Model
@@ -216,19 +216,25 @@ print("\nFeature coefficients:")
 for name, coef in zip(feature_cols, model_full.coef_):
     print(f"{name:12s}: {coef:+.3f}")
 
-'''
-The results of fitting the model to the full dataset reveal a key insight:
-    The baseline R^2 was approximately 0.089.
-    The full model's test R^2 rose to approximately 0.154.
+coef_pairs = list(zip(feature_cols, model_full.coef_))
+sorted_coefs = sorted(coef_pairs, key=lambda x: x[1])
 
-In other words, the addition of features proved beneficial, though not radically so. 
-The model has improved, yet it still explains only a limited portion of the variation in G3.
+print("\nLargest negative coefficients:")
+for name, coef in sorted_coefs[:2]:
+    print(f"{name:12s}: {coef:+.3f}")
 
-Another observation:
-    The 'schoolsup' variable carries a rather strong negative coefficient of -2.062.
-    This does not imply that such support is "harmful"; 
-        rather, it is likely that this support is more frequently received by students who are already experiencing academic difficulties.
-'''
+print("\nLargest positive coefficients:")
+for name, coef in sorted_coefs[-2:]:
+    print(f"{name:12s}: {coef:+.3f}")
+
+# The full model improves on the baseline: test R^2 increases from 0.0895 to 0.1539, so adding more features helps, but only modestly.
+# The train R^2 is 0.1749 and the test R^2 is 0.1539, which are fairly close.
+# That suggests the model is not strongly overfitting, but it also shows that the available features still do not explain most of the variation in G3.
+
+# One surprising result is the large negative coefficient for schoolsup (-2.062).
+# This does not necessarily mean school support lowers grades. A more likely explanation is that students receiving extra support were already struggling,
+# so the variable is capturing prior academic risk rather than the effect of support itself.
+
 
 # ------------------------------------------------------------------------
 # Task 6: Evaluate and Summarize
@@ -242,11 +248,13 @@ plt.plot([min_value, max_value], [min_value, max_value], color="red")
 plt.title("Predicted vs Actual (Full Model)")
 plt.xlabel("Predicted G3")
 plt.ylabel("Actual G3")
-plt.savefig("outputs/predicted_vs_actual_project02.png")
+plt.savefig("assignments_02/outputs/predicted_vs_actual_project02.png")
 plt.close()
 
 # A point above the diagonal means the actual grade is higher than the prediction, so the model underestimated the student's final grade.
 # A point below the diagonal means the actual grade is lower than the prediction, so the model overestimated the student's final grade.
+# The points are spread around the diagonal across the full grade range, but the predictions are compressed toward the middle, which suggests the model struggles
+# to fully capture the highest and lowest outcomes.
 
 print("\nSummary:")
 print(f"Filtered dataset size: {df_clean.shape}")
@@ -254,16 +262,18 @@ print(f"Test set size: {X_test.shape[0]}")
 print(f"Best model RMSE: {rmse_full}")
 print(f"Best model R^2: {r2_test_full}")
 
-'''
-The model seems to capture some signal, but its accuracy is still limited.
+# On a 0-20 grade scale, an RMSE of 2.8550 means the model is typically off by almost 3 grade points, which is a noticeable prediction error in practice.
+# The test R^2 of 0.1539 means the model explains only a limited share of the variation in final grades, even though it performs better than the baseline.
 
-The largest positive coefficients suggest factors associated with higher grades, while the largest negative coefficients suggest factors associated with lower grades.
+# The largest positive coefficients are internet and higher, which are associated with higher predicted G3 in this model.
+# The largest negative coefficients are schoolsup and failures, which are associated with lower predicted G3.
 
-If deploying this model in production, I would keep features with clearer signal and practical meaning, 
-such as failures, studytime, higher, internet, sex, Medu, and Fedu.
+# One surprising result is the strong negative coefficient for schoolsup.
+# A likely explanation is that students receiving extra school support were already more academically at risk, so the variable reflects existing difficulty
+# more than the effect of support itself.
 
-I would consider dropping features with very small coefficients like activities and freetime unless there were domain reasons to keep them.
-'''
+# If deploying this model in production, I would keep features with clearer signal and practical meaning, such as failures, studytime, higher, internet, sex,
+# Medu, and Fedu. I would consider dropping features with very small coefficients like activities and freetime unless there were domain reasons to keep them.
 
 # Neglected Feature: The Power of G1
 feature_cols_with_g1 = feature_cols + ["G1"]
@@ -286,13 +296,7 @@ r2_test_with_g1 = model_with_g1.score(X_test_g1, y_test_g1)
 print("\nModel with G1 included:")
 print(f"Test R^2 with G1: {r2_test_with_g1}")
 
-'''
-A high R^2 here does not mean that G1 causes G3.
-
-It means G1 is a very strong predictor because it is an earlier grade from the same course and reflects prior performance in the same class.
-
-This can be useful for identifying students who may struggle later, 
-but it is less useful for very early intervention because G1 is not available until after the first grading period.
-
-If educators want to intervene earlier, they need models based on background, behavior, attendance, and study-related features that are available before G1 exists.
-'''
+# Adding G1 increases the test R^2 from 0.1539 to 0.7491, which is a very large jump.
+# This does not mean G1 causes G3; it means G1 is a very strong predictor because it is an earlier grade from the same course and reflects prior performance in the same subject.
+# This model could be useful for identifying students at risk after the first grading period, but it is less useful for very early intervention before G1 is available.
+# If educators want to intervene earlier, they need features that are available before G1 exists, such as attendance, study habits, prior failures, and background factors.

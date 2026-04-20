@@ -78,10 +78,8 @@ y_pred_scaled = knn_scaled.predict(X_test_scaled)
 
 print(f"Scaled accuracy: {accuracy_score(y_test, y_pred_scaled)}")
 
-# Scaling slightly worsened the result:
-#         without scaling: 1.0
-#         with scaling: 0.9333
-# For this particular dataset split, the original features already work very well for KNN, so scaling changes neighbor distances without improving the classification.
+# Scaling slightly hurt performance on this split: accuracy dropped from 1.0000 on the unscaled data to 0.9333 on the scaled data.
+# For this particular Iris split, the original feature relationships already worked very well for KNN, so scaling changed neighbor distances without helping.
 
 # Q3. KNN
 # -----------------------------------------------------------------------------------
@@ -135,8 +133,8 @@ print(f"Decision Tree accuracy: {accuracy_score(y_test, y_pred_tree)}")
 print("Decision Tree classification report:")
 print(classification_report(y_test, y_pred_tree))
 
-# The Decision Tree performs slightly worse than KNN on this split, because its accuracy is 0.9667 while KNN reached 1.0
-#  Scaled vs. unscaled data would usually make little or no difference for Decision Trees because they do not depend on distance calculations.
+# The Decision Tree performs slightly worse than KNN on this split: its accuracy is 0.9667, while KNN reached 1.0000.
+# Scaled vs. unscaled data would usually make little or no difference for Decision Trees because they do not depend on distance calculations.
 
 # Q1. Logistic Regression and Regularization
 # -----------------------------------------------------------------------------------
@@ -145,7 +143,7 @@ c_values = [0.01, 1.0, 100]
 # Train three Logistic Regression models with different values ​​for the parameter C, 
 # which controls regularization (small C means stronger regularization; large C means weaker regularization).
 for c_value in c_values:
-    log_model = OneVsRestClassifier(                                 # OneVsRestClassifier transforms a multiclass problem into several binary ones.
+    log_model = OneVsRestClassifier(                                 
         LogisticRegression(
             C=c_value,
             max_iter=1000,
@@ -154,9 +152,9 @@ for c_value in c_values:
     )
     log_model.fit(X_train_scaled, y_train)
 
-    coefficient_size = np.abs(log_model.estimators_[0].coef_).sum()   # After wrapping, `log_model.estimators` no longer contains a single model, but rather several separate Logistic Regression models.
+    coefficient_size = np.abs(log_model.estimators_[0].coef_).sum()   
     for estimator in log_model.estimators_[1:]:
-        coefficient_size += np.abs(estimator.coef_).sum()             # coefficients can be positive or negative.
+        coefficient_size += np.abs(estimator.coef_).sum()             
 
     print(f"C={c_value}, total coefficient size={coefficient_size}")
 
@@ -224,13 +222,13 @@ plt.close()
 components_for_80 = np.argmax(cumulative_variance >= 0.80) + 1
 print(f"Components needed to explain about 80% of the variance: {components_for_80}")
 
-#
+# Approximately 13 components are needed to explain 80% of the variance.
 
 # Q4. PCA
 #-------------------------------------------------------------------------------------------------
-# 
+ 
 def reconstruct_digit(sample_idx, scores, pca, n_components):
-    """Reconstruct one digit using the first n_components principal components."""
+    '''Reconstruct one digit using the first n_components principal components.'''
     reconstruction = pca.mean_.copy()
     for i in range(n_components):
         reconstruction = reconstruction + scores[sample_idx, i] * pca.components_[i]
@@ -262,5 +260,5 @@ plt.tight_layout()
 plt.savefig("assignments_03/outputs/pca_reconstructions.png")
 plt.close()
 
-# The digits usually become clearly recognizable by around n=15.
-# That generally matches the point where the variance curve has already captured a large share of the total information and starts leveling off.
+# The digits become clearly recognizable by around n=15.
+# That broadly matches the variance curve: a relatively modest number of components already captures a large share of the total information.

@@ -10,3 +10,7 @@ __pycache__/
 
 # resources
 resources/
+
+# data
+assignments_03/spambase.data
+assignments_03/spambase.names

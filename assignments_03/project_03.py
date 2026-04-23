@@ -244,8 +244,13 @@ print("Classification report:")
 print(classification_report(y_test, y_pred_tree))
 
 # I would choose max_depth=10 for production.
-# It gives nearly the same test accuracy as an unlimited tree, but with less risk of overfitting and with a simpler, more interpretable model.
-# The depth comparison shows that training accuracy keeps rising as depth increases, but test accuracy improves only slightly, which is a classic sign of overfitting.
+# The unlimited tree reaches almost perfect training accuracy, which shows that it is close to memorizing the training data. 
+# However, its test accuracy improves only slightly compared with max_depth=10.
+#
+# That pattern reflects the bias-variance tradeoff: deeper trees reduce bias on the
+# training set, but they also increase variance and become more sensitive to noise.
+# A depth of 10 keeps nearly the same test performance while using a simpler model
+# that is less likely to memorize spurious patterns in the training data.
 
 #----------------------------------------------------------------------------------------------
 # Random Forest
@@ -321,30 +326,45 @@ plt.tight_layout()
 plt.savefig("assignments_03/outputs/feature_importances.png")
 plt.close()
 
-# Decision Tree and Random Forest may agree on several key features,but Random Forest importances are often more stable 
-# because they are averaged across many trees rather than coming from a single fitted tree.
+# The two models agree on several important spam-related features, especially char_freq_!, char_freq_$, word_freq_remove, and word_freq_free.
+#
+# These features make intuitive sense for spam detection. 
+# Spam messages often use attention-grabbing punctuation such as exclamation marks and dollar signs, and
+# they frequently contain words like "free" or "remove" that appear in promotional or manipulative email.
+#
+# Random Forest spreads importance across several related features, including the capital-run-length statistics, 
+# which suggests that spam detection benefits from combining many weak-to-moderate signals rather than relying on a single rule.
 
 # -----------------------------------------------------------------------------------------------
 # Task 3 summary
+# Random Forest performs best on this dataset because spam detection here depends on many nonlinear patterns and feature interactions. 
+# The dataset mixes word frequencies, character frequencies, and capitalization statistics, and a forest
+# can capture complex threshold-based rules without requiring feature scaling.
 
-# Random Forest performs best on this train/test split, with accuracy 0.9446.
+# KNN performs very poorly on unscaled data because it relies directly on distances between samples. 
+# In Spambase, some features are tiny frequencies while others, such as capital-run-length features, can be much larger. 
+# Without scaling, the larger-magnitude features dominate the distance calculation and drown out useful signal from smaller-scale features.
 
-# KNN improves dramatically after scaling: accuracy rises from 0.7991 on unscaled
-# data to 0.9077 on scaled data, which matches the expectation that distance-based
-# models are very sensitive to feature scale.
+# Scaling helps KNN dramatically because it puts all features on a comparable scale.
+# That makes the distance calculation more meaningful and allows word-frequency, character-frequency, and capitalization features to contribute more fairly.
 
-# PCA does not help much for KNN here: scaled KNN reaches 0.9077, while PCA-reduced KNN reaches 0.9066. 
-# 
-# Logistic regression shows a similar pattern: scaled logistic regression reaches 0.9294, while PCA-reduced logistic regression drops to 0.9186.
-# So for this dataset, PCA slightly hurts the non-tree models rather than helping them.
+# PCA does not help much here and can slightly hurt performance because PCA preserves directions of high variance, 
+# not necessarily directions with the most predictive signal for spam classification. 
+# Some lower-variance features may still be highly useful for separating spam from ham. 
+# PCA is also a linear transformation, so it cannot preserve every nonlinear structure that models like KNN or forests may use.
 
-# For a spam filter, accuracy is useful but not sufficient on its own.
+# Logistic Regression still performs well because the dataset contains many signals that are already fairly informative in a linear way. 
+# Features such as exclamation frequency, dollar-sign frequency, and words like "free" or "remove" can push the
+# prediction toward spam even without modeling highly complex interactions.
 
+# For a spam filter, accuracy is useful but not sufficient on its own. 
 # False positives mean legitimate email is marked as spam, which can be very costly if an important message is hidden or missed. 
-# False negatives mean spam gets through, which is annoying and potentially risky. 
+# False negatives mean spam gets through, which is annoying and potentially risky.
 
-# For a real spam filter, I would prioritize keeping false positives as low as possible, even if that means allowing a few more
-# spam emails through, because blocking legitimate email is usually the more serious error.
+# In a real spam-filtering system, I would usually prioritize reducing false positives,
+# which means pushing precision on the spam class higher. 
+# One practical way to do that would be threshold tuning with predict_proba(), 
+# so that the model only labels an email as spam when its predicted spam probability exceeds a stricter cutoff.
 
 #-----------------------------------------------------------------------------------------------
 # Confusion matrix for the best-performing model (Random Forest)
@@ -362,14 +382,20 @@ print("\nBest model error breakdown:")
 print(f"False positives (ham predicted as spam): {fp}")
 print(f"False negatives (spam predicted as ham): {fn}")
 
-# For this best model, compare false positives and false negatives directly.
-# In a spam filter, false positives are usually the more costly mistake because they hide legitimate email from the user.
+# In this result, false negatives are more common than false positives.
+# That means the model more often lets spam through than incorrectly blocks legitimate email. 
+# Depending on the business setting, that may or may not be the right tradeoff.
+#
+# If avoiding false positives is the top priority, a production system could use
+# predict_proba() and raise the threshold for labeling an email as spam. 
+# That would usually increase spam precision, but it would also allow more spam messages through.
 
 # --- Task 4: Cross-Validation ---
 # ----------------------------------------------------------------------------------------------
+
 cv_results = {}
 
-# KNN unscaled
+# KNN on unscaled data
 scores_knn_unscaled = cross_val_score(
     KNeighborsClassifier(n_neighbors=5),
     X_train,
@@ -378,19 +404,30 @@ scores_knn_unscaled = cross_val_score(
 )
 cv_results["KNN unscaled"] = scores_knn_unscaled
 
-# KNN scaled
+# KNN on scaled data
+knn_scaled_pipeline_cv = Pipeline([
+    ("scaler", StandardScaler()),
+    ("classifier", KNeighborsClassifier(n_neighbors=5))
+])
+
 scores_knn_scaled = cross_val_score(
-    KNeighborsClassifier(n_neighbors=5),
-    X_train_scaled,
+    knn_scaled_pipeline_cv,
+    X_train,
     y_train,
     cv=5
 )
 cv_results["KNN scaled"] = scores_knn_scaled
 
-# KNN PCA
+# KNN on PCA-reduced data
+knn_pca_pipeline_cv = Pipeline([
+    ("scaler", StandardScaler()),
+    ("pca", PCA(n_components=n_components_90)),
+    ("classifier", KNeighborsClassifier(n_neighbors=5))
+])
+
 scores_knn_pca = cross_val_score(
-    KNeighborsClassifier(n_neighbors=5),
-    X_train_pca,
+    knn_pca_pipeline_cv,
+    X_train,
     y_train,
     cv=5
 )
@@ -414,19 +451,30 @@ scores_rf = cross_val_score(
 )
 cv_results["Random Forest"] = scores_rf
 
-# Logistic Regression scaled
+# Logistic Regression on scaled data
+logreg_scaled_pipeline_cv = Pipeline([
+    ("scaler", StandardScaler()),
+    ("classifier", LogisticRegression(C=1.0, max_iter=1000, solver="liblinear"))
+])
+
 scores_logreg_scaled = cross_val_score(
-    LogisticRegression(C=1.0, max_iter=1000, solver="liblinear"),
-    X_train_scaled,
+    logreg_scaled_pipeline_cv,
+    X_train,
     y_train,
     cv=5
 )
 cv_results["Logistic Regression scaled"] = scores_logreg_scaled
 
-# Logistic Regression PCA
+# Logistic Regression on PCA-reduced data
+logreg_pca_pipeline_cv = Pipeline([
+    ("scaler", StandardScaler()),
+    ("pca", PCA(n_components=n_components_90)),
+    ("classifier", LogisticRegression(C=1.0, max_iter=1000, solver="liblinear"))
+])
+
 scores_logreg_pca = cross_val_score(
-    LogisticRegression(C=1.0, max_iter=1000, solver="liblinear"),
-    X_train_pca,
+    logreg_pca_pipeline_cv,
+    X_train,
     y_train,
     cv=5
 )
@@ -436,9 +484,6 @@ print("\nCross-validation results:")
 for model_name, scores in cv_results.items():
     print(f"{model_name}: mean={scores.mean():.4f}, std={scores.std():.4f}")
 
-# Cross-validation gives a more reliable estimate than a single train/test split
-# because it evaluates each model across multiple folds instead of relying on one particular partition of the data.
-
 best_mean_model = max(cv_results.items(), key=lambda item: item[1].mean())
 most_stable_model = min(cv_results.items(), key=lambda item: item[1].std())
 
@@ -446,8 +491,9 @@ print("\nCross-validation summary:")
 print(f"Most accurate model by mean CV score: {best_mean_model[0]} ({best_mean_model[1].mean():.4f})")
 print(f"Most stable model by CV std: {most_stable_model[0]} ({most_stable_model[1].std():.4f})")
 
-# The cross-validation ranking is broadly consistent with the single train/test split:
-# Random Forest remains the strongest model overall, while unscaled KNN remains the weakest.
+# These cross-validation results are more trustworthy because scaling and PCA
+# now happen inside pipelines. That means each fold fits preprocessing only on
+# that fold's training split, which avoids leakage from the validation fold.
 
 # --- Task 5: Building a Prediction Pipeline ---
 # ----------------------------------------------------------------------------------------------------

@@ -16,3 +16,5 @@ resources/
 assignments_03/spambase.data
 assignments_03/spambase.names
 
+# API key
+.env

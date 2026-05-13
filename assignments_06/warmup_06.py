@@ -1,4 +1,10 @@
 from dotenv import load_dotenv
+from llama_index.core import Document, VectorStoreIndex
+from llama_index.core.evaluation import FaithfulnessEvaluator, RelevancyEvaluator
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.llms.openai import OpenAI as LlamaOpenAI
+from openai import OpenAI
+from pypdf import PdfReader
 import os
 import string
 
@@ -7,7 +13,7 @@ if load_dotenv():
 else:
     print("Warning: could not load API key. Check your .env file.")
 
-
+#-------------------------------------------------------------------------------------------------
 # --- RAG Concepts ---
 
 # Concepts Q1
@@ -82,6 +88,7 @@ Correct order of a complete RAG pipeline:
 
 print("Concepts Q3 completed. See comments in the code.")
 
+#-------------------------------------------------------------------------------------------------
 # --- Keyword RAG ---
 
 def simple_keyword_retrieval(query, documents, verbose=True):
@@ -183,3 +190,428 @@ print(f"Keyword Q3 selected document: {selected_document_name}")
 # This happened because the document says "loyalty program", "earn", "points",
 # and "redeem", but it never uses the exact word "rewards". This shows that
 # simple keyword retrieval cannot understand synonyms or related concepts.
+
+#-------------------------------------------------------------------------------------------------
+# --- Semantic RAG Concepts ---
+
+# Semantic Q1
+"""
+A vector embedding is a list of numbers that represents the meaning of a piece
+of text. Texts with similar meanings should have embeddings that are close to
+each other in vector space.
+
+The chunk with a cosine similarity score of 0.85 is more relevant than the chunk
+with a score of 0.30. A higher cosine similarity means the query and the chunk
+are closer in meaning, so 0.85 suggests a strong semantic relationship while
+0.30 suggests a weaker relationship.
+
+Semantic search can find a relevant chunk even when the exact words do not match
+because embeddings represent meaning, not just literal keywords. For example,
+a query about "rewards" could match a chunk about a "loyalty program" because
+those ideas are related.
+"""
+
+print("\n--- Semantic RAG Concepts ---")
+print("Semantic Q1 completed. See comments in the code.")
+
+# Semantic Q2
+"""
+| Feature                    | Keyword RAG                    | Semantic RAG                            |
+|----------------------------|--------------------------------|-----------------------------------------|
+| What is compared?          | Exact word overlap             | Vector embeddings / meaning similarity  |
+| What is retrieved?         | Full document                  | Most relevant chunks                    |
+| Can it handle synonyms?    | No                             | Yes, usually                            |
+| Storage format             | Plain text dictionary          | Vector store / embedding index          |
+| Relevance score            | Number of overlapping keywords | Cosine similarity score                 |
+"""
+
+print("Semantic Q2 completed. See comments in the code.")
+
+#-------------------------------------------------------------------------------------------------
+# --- LlamaIndex ---
+
+# LlamaIndex Q1
+possible_pdf_directories = [
+    "assignments_06/brightleaf_pdfs",
+    "../python-200/lessons/06_AI_augmentation/resources/brightleaf_pdfs",
+    "lessons/06_AI_augmentation/resources/brightleaf_pdfs",
+]
+
+pdf_directory = None
+
+for possible_directory in possible_pdf_directories:
+    if os.path.isdir(possible_directory):
+        pdf_directory = possible_directory
+        break
+
+if pdf_directory is None:
+    raise FileNotFoundError(
+        "Could not find the brightleaf_pdfs directory. "
+        "Check that the lesson materials are available locally."
+    )
+
+questions = [
+    "What employee benefits does BrightLeaf offer?",
+    "What are BrightLeaf's security policies?",
+]
+
+print("\n--- LlamaIndex ---")
+
+
+def load_pdf_documents(folder_path):
+    """Load PDF files with pypdf and convert them into LlamaIndex Documents."""
+    documents = []
+
+    for filename in os.listdir(folder_path):
+        if filename.endswith(".pdf"):
+            file_path = os.path.join(folder_path, filename)
+            reader = PdfReader(file_path)
+
+            pages_text = []
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    pages_text.append(page_text)
+
+            full_text = "\n".join(pages_text)
+
+            documents.append(
+                Document(
+                    text=full_text,
+                    metadata={"filename": filename},
+                )
+            )
+
+    return documents
+
+
+documents = load_pdf_documents(pdf_directory)
+
+print(f"Loaded {len(documents)} PDF documents.")
+
+index = VectorStoreIndex.from_documents(
+    documents,
+    embed_model=OpenAIEmbedding(model="text-embedding-3-small"),
+)
+
+retriever = index.as_retriever(similarity_top_k=3)
+
+client = OpenAI()
+
+for question in questions:
+    print(f"\nQuestion: {question}")
+
+    retrieved_nodes = retriever.retrieve(question)
+
+    context_chunks = []
+    for node_number, node in enumerate(retrieved_nodes, start=1):
+        chunk_text = node.node.get_content()
+        filename = node.node.metadata.get("filename", "Unknown file")
+        context_chunks.append(chunk_text)
+
+        print(f"\nSource node {node_number}")
+        print(f"Source file: {filename}")
+        print(f"Similarity score: {node.score}")
+        print(f"Chunk preview: {chunk_text[:150]}")
+
+    context = "\n\n".join(context_chunks)
+
+    prompt = f"""
+Use the context below to answer the question. If the context does not contain
+the answer, say that the answer is not available in the provided context.
+
+Context:
+{context}
+
+Question:
+{question}
+"""
+
+    response = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a helpful assistant that answers using only the provided context.",
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+    )
+
+    answer = response.choices[0].message.content
+
+    print("\nAnswer from the model:")
+    print(answer)
+
+
+# LlamaIndex Q1 observations:
+"""
+Query 1: What employee benefits does BrightLeaf offer?
+
+The retrieved chunks looked mostly relevant. The top source node came from
+employee_benefits.pdf, which is the correct and most useful document for this
+question. The second and third nodes came from partnerships.pdf and
+mission_statement.pdf, which were less directly relevant.
+
+The model's response sounded confident and specific. It listed concrete benefits
+such as medical insurance, vision benefits, wellness programs, life insurance,
+disability insurance, a 401(k) match, parental leave, flexible work options,
+professional development, mentorship, DEI support, and online courses.
+
+The unexpected retrievals were partnerships.pdf and mission_statement.pdf. They
+are related to BrightLeaf as a company, but they are not the best sources for
+employee benefits.
+
+
+Query 2: What are BrightLeaf's security policies?
+
+The retrieved chunks looked mostly relevant. The top source node came from
+security_policy.pdf, which is the correct and most useful document for this
+question. The second and third nodes came from employee_benefits.pdf and
+mission_statement.pdf, which were less directly relevant.
+
+The model's response sounded confident and specific. It described network and
+data security, incident response, employee training, access governance, vendor
+security, hardware security, compliance, and governance.
+
+The unexpected retrievals were employee_benefits.pdf and mission_statement.pdf.
+They were not harmful because the top retrieved chunk contained the relevant
+security policy text, but they show that semantic retrieval can still bring in
+company-related documents that are only loosely related to the question.
+"""
+
+# LlamaIndex Q2
+print("\n--- LlamaIndex Q2 ---")
+
+comparison_question = "What are BrightLeaf's security policies?"
+
+for top_k in [1, 5]:
+    print(f"\nRunning query with similarity_top_k={top_k}")
+    print(f"Question: {comparison_question}")
+
+    comparison_retriever = index.as_retriever(similarity_top_k=top_k)
+    retrieved_nodes = comparison_retriever.retrieve(comparison_question)
+
+    context_chunks = []
+    for node_number, node in enumerate(retrieved_nodes, start=1):
+        chunk_text = node.node.get_content()
+        filename = node.node.metadata.get("filename", "Unknown file")
+        context_chunks.append(chunk_text)
+
+        print(f"\nSource node {node_number}")
+        print(f"Source file: {filename}")
+        print(f"Similarity score: {node.score}")
+
+    context = "\n\n".join(context_chunks)
+
+    prompt = f"""
+Use the context below to answer the question. If the context does not contain
+the answer, say that the answer is not available in the provided context.
+
+Context:
+{context}
+
+Question:
+{comparison_question}
+"""
+
+    response = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a helpful assistant that answers using only the provided context.",
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+    )
+
+    answer = response.choices[0].message.content
+
+    print("\nResponse:")
+    print(answer)
+
+
+# LlamaIndex Q2 observations:
+"""
+I compared the same security policy query with similarity_top_k=1 and
+similarity_top_k=5.
+
+With similarity_top_k=1, the retriever returned only security_policy.pdf. This
+was enough for the model to produce a detailed and specific answer because the
+top source node contained the main security policy information.
+
+With similarity_top_k=5, the retriever returned security_policy.pdf plus
+employee_benefits.pdf, mission_statement.pdf, partnerships.pdf, and
+earnings_report.pdf. The model's answer did not change much because the first
+source node already had the relevant information.
+
+More retrieved context is not always better. It can help when the answer is
+spread across several chunks, but it can also add noise when extra chunks come
+from documents that are only loosely related to the question.
+"""
+
+# LlamaIndex Q3
+print("\n--- LlamaIndex Q3 ---")
+
+struggle_question = "Should I invest in BrightLeaf Solar?"
+
+print(f"\nQuestion: {struggle_question}")
+
+struggle_retriever = index.as_retriever(similarity_top_k=3)
+retrieved_nodes = struggle_retriever.retrieve(struggle_question)
+
+context_chunks = []
+
+for node_number, node in enumerate(retrieved_nodes, start=1):
+    chunk_text = node.node.get_content()
+    filename = node.node.metadata.get("filename", "Unknown file")
+    context_chunks.append(chunk_text)
+
+    print(f"\nSource node {node_number}")
+    print(f"Source file: {filename}")
+    print(f"Similarity score: {node.score}")
+    print(f"Chunk text:")
+    print(chunk_text)
+
+context = "\n\n".join(context_chunks)
+
+prompt = f"""
+Use the context below to answer the question. If the context does not contain
+enough information to answer safely, say what information is missing.
+
+Context:
+{context}
+
+Question:
+{struggle_question}
+"""
+
+response = client.chat.completions.create(
+    model="gpt-4.1-mini",
+    messages=[
+        {
+            "role": "system",
+            "content": "You are a helpful assistant that answers using only the provided context.",
+        },
+        {
+            "role": "user",
+            "content": prompt,
+        },
+    ],
+)
+
+answer = response.choices[0].message.content
+
+print("\nResponse:")
+print(answer)
+
+
+# LlamaIndex Q3 observations:
+"""
+I expected this query to be difficult because "Should I invest in BrightLeaf
+Solar?" asks for a recommendation, not just a factual answer from one document.
+
+The retriever returned mission_statement.pdf, partnerships.pdf, and
+earnings_report.pdf. This made sense because the question requires information
+about the company's mission, growth strategy, partnerships, financial
+performance, risks, and future outlook.
+
+The model gave a fairly careful answer. It summarized positive signals such as
+revenue growth, partnerships, expansion plans, and community impact, but it also
+noted missing information such as current stock price, valuation, competitive
+position, dividend policy, liquidity, macroeconomic factors, and personal
+investment goals.
+
+I would improve this system by making the prompt stricter for financial or
+recommendation-style questions. The model should clearly separate facts from
+investment advice, avoid giving a direct recommendation, list missing evidence,
+and suggest what additional documents or data would be needed before making a
+decision.
+"""
+
+# LlamaIndex Q4
+print("\n--- LlamaIndex Q4 ---")
+
+judge_llm = LlamaOpenAI(model="gpt-4o-mini")
+
+faithfulness_evaluator = FaithfulnessEvaluator(llm=judge_llm)
+relevancy_evaluator = RelevancyEvaluator(llm=judge_llm)
+
+query_engine = index.as_query_engine(
+    similarity_top_k=3,
+    llm=LlamaOpenAI(model="gpt-4o-mini"),
+)
+
+evaluation_queries = [
+    "What employee benefits does BrightLeaf offer?",
+    "What is BrightLeaf's cafeteria lunch menu?",
+]
+
+for eval_query in evaluation_queries:
+    print(f"\nEvaluation query: {eval_query}")
+
+    response = query_engine.query(eval_query)
+
+    print("\nResponse:")
+    print(response)
+
+    faithfulness_result = faithfulness_evaluator.evaluate_response(
+        query=eval_query,
+        response=response,
+    )
+
+    relevancy_result = relevancy_evaluator.evaluate_response(
+        query=eval_query,
+        response=response,
+    )
+
+    print("\nFaithfulness score:")
+    print(faithfulness_result.score)
+    print("Faithfulness passing:")
+    print(faithfulness_result.passing)
+    print("Faithfulness feedback:")
+    print(faithfulness_result.feedback)
+
+    print("\nRelevancy score:")
+    print(relevancy_result.score)
+    print("Relevancy passing:")
+    print(relevancy_result.passing)
+    print("Relevancy feedback:")
+    print(relevancy_result.feedback)
+
+
+# LlamaIndex Q4 observations:
+"""
+A faithfulness score of 1.0 means the response is supported by the retrieved
+context. A score of 0.0 would indicate that the response contains claims that
+are not supported by the retrieved context, which could mean the model
+hallucinated or added outside information.
+
+A relevancy score measures whether the response actually answers the user's
+query. This is different from faithfulness because an answer can be faithful to
+the context but still not be relevant to the specific question.
+
+The scores changed between the two queries. The employee benefits query received
+faithfulness 1.0 and relevancy 1.0 because the BrightLeaf documents contain
+direct information about employee benefits, and the response answered the
+question with supported details.
+
+The cafeteria lunch menu query received faithfulness 1.0 but relevancy 0.0.
+This makes sense because the model did not hallucinate a cafeteria menu; it
+truthfully said that the information was not provided. However, it still did not
+answer the user's requested question with menu details, so the relevancy score
+was low.
+
+The LLM-as-a-judge approach uses another language model to evaluate the RAG
+response. It is used because RAG answers are often open-ended, so there is not
+always one exact string that can be compared with a simple accuracy metric. The
+judge model can evaluate qualities like groundedness, relevance, and whether
+the response is supported by the retrieved context.
+"""

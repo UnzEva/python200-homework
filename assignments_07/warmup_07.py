@@ -1,6 +1,10 @@
+import os
 import json
 from datetime import datetime
 from pathlib import Path
+
+import matplotlib
+matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -8,12 +12,17 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from scipy.stats import pearsonr
 
+from smolagents import ToolCallingAgent, OpenAIServerModel, tool
+from smolagents import CodeAgent
+
 if load_dotenv():
     print("API key loaded successfully.")
 else:
     print("Warning: could not load API key. Check your .env file.")
 
 client = OpenAI()
+
+api_key = os.getenv("OPENAI_API_KEY")
 
 possible_resources_dirs = [
     Path("assignments_07/resources"),
@@ -421,17 +430,21 @@ class CsvManager:
         if x is None:
             ax = self.df[y].plot(kind="line")
             ax.set_title(f"{title_csv} | Line plot: {y} vs row index")
-            plt.show()
-            return f"Plotted {y} vs row index as a line plot."
+            output_path = Path("assignments_07/outputs") / f"{title_csv}_{y}_line.png"
+            plt.savefig(output_path)
+            plt.close()
+            return f"Plotted {y} vs row index as a line plot and saved it to {output_path}."
 
         if x not in self.df.columns:
             return f"Error: column '{x}' is not in {self.df.columns.tolist()}"
 
         ax = self.df.plot(x=x, y=y, kind=plot_type)
         ax.set_title(f"{title_csv} | {plot_type.title()} plot: {y} vs {x}")
-        plt.show()
+        output_path = Path("assignments_07/outputs") / f"{title_csv}_{y}_vs_{x}_{plot_type}.png"
+        plt.savefig(output_path)
+        plt.close()
 
-        return f"Plotted {y} vs {x} as a {plot_type}."
+        return f"Plotted {y} vs {x} as a {plot_type} and saved it to {output_path}."
 
 
 csv_backend = CsvManager(RESOURCES_DIR)
@@ -673,3 +686,211 @@ print("\nQ6: Full messages list after the ReAct loop")
 # Python function so the model can use that result in the next reasoning step.
 
 print(json.dumps(messages, indent=2, default=str))
+
+# --- Lesson 04: smolagents ---
+
+# Q7
+# ------------------------------------------------------------------------------
+
+@tool
+def smol_compute_correlation(col1: str, col2: str) -> dict:
+    """
+    Compute the Pearson correlation between two numeric columns in the loaded CSV.
+
+    Args:
+        col1: The first numeric column name.
+        col2: The second numeric column name.
+    """
+    return csv_backend.compute_correlation(col1, col2)
+
+
+print("\n--- Lesson 04: smolagents ---")
+print("Q7: smolagents tool description")
+print(smol_compute_correlation.description)
+
+# Q7 reflection:
+# In Q4, I wrote the JSON schema manually, including the tool name, description,
+# parameters, types, and required fields. With smolagents, the @tool decorator
+# generates much of that tool description automatically from the function name,
+# type hints, and docstring.
+#
+# To produce a good description, smolagents needs the developer to write a clear
+# function name, accurate type annotations, and a useful docstring that explains
+# what the tool does and what each argument means.
+
+# Q8
+# -------------------------------------------------------------------------------------------
+
+@tool
+def smol_list_csv_files() -> dict:
+    """List available CSV files in resources/.
+
+    Returns:
+        A dict with a "files" list, or a message if none are found.
+    """
+    return csv_backend.list_csv_files()
+
+
+@tool
+def smol_load_csv(filename: str) -> dict:
+    """Load a CSV file from resources/ and make it the active dataset.
+
+    Args:
+        filename: CSV filename in resources/. You can pass "bike_commute" or "bike_commute.csv".
+
+    Returns:
+        A dict with a status message and column names, or an error dict.
+    """
+    return csv_backend.load_csv(filename)
+
+
+@tool
+def smol_get_columns() -> list[str] | dict:
+    """Return column names for the currently loaded CSV.
+
+    Returns:
+        A list of column names, or an error dict if no CSV is loaded.
+    """
+    return csv_backend.get_columns()
+
+
+@tool
+def smol_summarize_columns(columns: list[str] | None = None) -> dict:
+    """Return summary stats for selected columns or all columns.
+
+    Args:
+        columns: Column names to summarize. If None, summarizes all columns.
+
+    Returns:
+        A dict of summary statistics, or an error dict.
+    """
+    return csv_backend.summarize_columns(columns)
+
+
+@tool
+def smol_describe_column(column: str) -> dict:
+    """Describe a single column with basic statistics.
+
+    Args:
+        column: The name of the column to describe.
+
+    Returns:
+        A dict of basic stats for the column, or an error dict.
+    """
+    return csv_backend.describe_column(column)
+
+
+@tool
+def smol_plot_data(y: str, x: str | None = None, plot_type: str = "line") -> str | dict:
+    """Plot from the active CSV.
+
+    Args:
+        y: Column name to plot on the y-axis.
+        x: Column name to plot on the x-axis. If None, use row index.
+        plot_type: "line" or "scatter". Scatter requires x and y.
+
+    Returns:
+        Generates and shows the plot. Returns a short success message string, or an error dict/string.
+    """
+    return csv_backend.plot_data(y=y, x=x, plot_type=plot_type)
+
+
+TOOLS = [
+    smol_list_csv_files,
+    smol_load_csv,
+    smol_get_columns,
+    smol_summarize_columns,
+    smol_describe_column,
+    smol_compute_correlation,
+    smol_plot_data,
+]
+
+model = OpenAIServerModel(
+    api_key=api_key,
+    model_id="gpt-4o-mini",
+)
+
+SMOL_SYSTEM_PROMPT = (
+    "You are a small data assistant to help analyze files stored in resources/. "
+    "Use the available tools to do any work requested and do not guess. "
+    "Keep answers short and student-friendly."
+)
+
+tool_agent = ToolCallingAgent(
+    tools=TOOLS,
+    model=model,
+    instructions=SMOL_SYSTEM_PROMPT,
+    verbosity_level=0,
+)
+
+CODE_AGENT_PROMPT = (
+    "You are a data analysis assistant. "
+    "You can call the provided tools. "
+    "You can also write and execute Python code when tools are not enough. "
+    "Prefer tools for simple tasks. "
+    "If plot styling is requested and the plot tool cannot handle it, write matplotlib code. "
+    "When using code, use the provided csv_manager object from additional_args. "
+    "Call csv_manager.load_csv('bike_commute.csv') if needed, then use csv_manager.df as the pandas DataFrame. "
+    "Save any generated plots to assignments_07/outputs instead of displaying them."
+)
+
+code_agent = CodeAgent(
+    tools=TOOLS,
+    model=model,
+    instructions=CODE_AGENT_PROMPT,
+    additional_authorized_imports=["matplotlib.pyplot", "pandas", "numpy"],
+    verbosity_level=0,
+    max_steps=8,
+)
+
+prompt = "Load bike_commute.csv. Plot avg_heart_rate vs duration_min as a scatter plot with green dots."
+
+print("\nQ8: ToolCallingAgent vs CodeAgent")
+
+response_tool = tool_agent.run(prompt)
+print("ToolCallingAgent response:")
+print(response_tool)
+
+response_code = code_agent.run(
+    prompt,
+    additional_args={"csv_manager": csv_backend},
+)
+
+print("CodeAgent response:")
+print(response_code)
+
+# Q8 reflection:
+"""
+The ToolCallingAgent loaded the CSV and used the existing plot_data tool. 
+It created and saved a scatter plot, but the plot_data tool does not have a color
+parameter. The response mentioned green dots, but the tool interface does not
+actually give the agent a reliable way to control dot color.
+
+The CodeAgent tried to write Python code to satisfy the custom styling request.
+It first made some code mistakes, including using plt before it was defined and
+trying to import os, which was not allowed. After those errors, it recovered and
+reported that it saved a custom scatter plot.
+
+This shows that ToolCallingAgent is useful when the available tools exactly cover the task. 
+CodeAgent is more flexible when the request requires custom code
+or behavior that was not built into the original tools, but it can also make
+coding mistakes and need extra steps to recover.
+"""
+
+# Q9
+# --------------------------------------------------------------------------------------
+
+"""
+A ToolCallingAgent would be a better choice for a task like checking an order status, 
+looking up a customer record, or loading and summarizing a CSV with predefined tools. 
+These tasks have clear allowed actions, known inputs and
+outputs, and do not require the agent to invent new logic. 
+That makes them a good fit for a tool-based approach because the agent stays inside 
+a controlled set of capabilities.
+
+One meaningful risk of using a CodeAgent is that it generates and runs code.
+That code might contain bugs, use the wrong variable, access the wrong file, or
+perform an unsafe operation if the environment is not restricted carefully. 
+A ToolCallingAgent is more limited because it can only call tools that the
+developer already defined, so it has less freedom to accidentally create harmful or incorrect behavior.
+"""

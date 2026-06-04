@@ -2,7 +2,7 @@
 
 ## Video Link
 
-TODO: Paste video link here.
+[Video link here.](https://drive.google.com/file/d/1Wl7M2WYQI3TRkNoH3aaO1NPoSvZR2eoo/view?usp=sharing)
 
 ## Cost Analysis Summary
 

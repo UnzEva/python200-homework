@@ -46,13 +46,21 @@ for temp in temperatures:
     print("Response:")
     print(response.choices[0].message.content)
 
-# In this run, the outputs did not differ very much across temperatures.
-# The model gave very similar names at temperature 0 and 1.5, while the
-# response at 0.7 was slightly more descriptive and conversational.
+# In this run, the outputs did not differ very much across temperatures, but
+# temperature still controls an important behavior. Mechanically, temperature
+# changes how strongly the model favors the highest-probability next tokens.
+# At temperature=0, the model is pushed toward the most likely token choices, so
+# the output is more deterministic and repeatable. At higher temperatures, lower-
+# probability tokens have more chance to be selected, which can make responses
+# more varied, surprising, or creative.
 #
-# In general, lower temperature tends to produce more stable and predictable
-# outputs, while higher temperature can increase variation and creativity.
-# If I needed a consistent, reproducible output, I would use temperature=0.    
+# This naming prompt may not be the best test case for seeing temperature
+# differences because short creative names often come from a small set of common
+# branding patterns, and many possible answers are acceptable. A longer task, or
+# running each temperature several times, would make the randomness easier to
+# observe. If I needed a consistent, reproducible output, I would use
+# temperature=0; if I wanted more brainstorming variety, I would try a higher
+# temperature.   
 
 # API Q3
 #--------------------------------------------------------------------------------
@@ -332,11 +340,22 @@ response = client.chat.completions.create(
 
 raw_text = response.choices[0].message.content
 
+cleaned_text = raw_text.strip()
+
+if cleaned_text.startswith("```json"):
+    cleaned_text = cleaned_text.removeprefix("```json").strip()
+
+if cleaned_text.startswith("```"):
+    cleaned_text = cleaned_text.removeprefix("```").strip()
+
+if cleaned_text.endswith("```"):
+    cleaned_text = cleaned_text.removesuffix("```").strip()
+
 print("\nRaw response:")
 print(raw_text)
 
 try:
-    parsed = json.loads(raw_text)
+    parsed = json.loads(cleaned_text)
 
     print("\nParsed sentiment:")
     print(parsed["sentiment"])
@@ -350,6 +369,8 @@ try:
 except json.JSONDecodeError:
     print("\nFailed to parse valid JSON. Raw response for debugging:")
     print(raw_text)
+    print("\nCleaned response for debugging:")
+    print(cleaned_text)
 
 # Structured output is useful because it makes the model response easier to parse and integrate into downstream code. 
 # Returning valid JSON is especially helpful when an LLM is part of a larger automated pipeline.
@@ -418,14 +439,12 @@ print(response.choices[0].message.content)
 """
 Ollama output:
 Thinking...
-Okay, the user asked me to explain what a large language model is in two sentences. Let me start by recalling what I know. Large language models are basically AI 
-models that can understand and generate human language. They need to be in two sentences, so I have to make sure each sentence is concise and covers the key 
-points.
-
-First sentence: Introduce the concept, mention that they can understand and generate human language. Second sentence: Maybe explain their training process, like 
-using massive amounts of text data. Wait, but the user wants two sentences. Let me check if I can combine that into two. Also, make sure the sentences flow well 
-and are clear. I should avoid any technical terms that might confuse. Alright, putting it together: "Large language models are AI systems that can understand and 
-generate human language, trained on vast amounts of text data to learn patterns and improve accuracy." Then the second sentence: "They process and analyze this 
-information to make predictions, solve problems, or create content, making them powerful tools in various fields." That should work.
+Okay, so the user wants me to explain what a large language model is in two sentences. Let me start by breaking down the key elements of a large language model. First, I know they're AI models, so I should mention 
+that they're trained on massive datasets. Then, their primary function is to understand and generate human-like text. Maybe include examples like answering questions or creating stories. Wait, but how to make it 
+concise in two sentences? Let me check if I'm including all necessary points without redundancy. Also, ensure the language is clear and straightforward. Maybe start with the definition, then the purpose, and then 
+an example. That should cover it.
 ...done thinking.
+
+A large language model is an AI system designed to understand and generate human-like text, such as answering questions or creating stories, by learning from vast datasets. It powers tools like chatbots, content 
+generation, and language translation, enabling complex interactions with humans.
 """

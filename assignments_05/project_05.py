@@ -112,12 +112,17 @@ for item in rewritten_bullets:
     print(f"\nOriginal: {item['original']}")
     print(f"Improved: {item['improved']}")
 
-# These original bullets were weak because they were vague and generic, and they did not clearly show ownership, scope, or professional impact. 
-# The model improved them by using stronger action verbs such as "provided," "compiled," "presented," and "collaborated," 
-# and by making the language sound more polished and resume-like.
-# The rewritten bullets are meaningfully better, although some phrases such as "enhancing satisfaction and loyalty" 
-# or "facilitating informed decision-making" still sound somewhat generic because the original bullets did not include specific results or metrics. 
-# In a real application, the best next step would be to add concrete details from the user wherever possible.
+# These original bullets were weak because they described activities instead of outcomes.
+# They also lacked ownership, scope, and measurable impact: for example, they did not
+# explain what kind of customer problems were solved, what reports were created, who used
+# the reports, how large the project was, or what changed because of the work.
+# The model improved them by using stronger action verbs such as "provided," "compiled,"
+# "presented," and "collaborated," and by making the language sound more polished and resume-like.
+
+# The rewritten bullets are meaningfully better, although some phrases such as "enhancing
+# satisfaction and loyalty" or "facilitating informed decision-making" still sound somewhat
+# generic because the original bullets did not include specific results or metrics. In a real
+# application, the best next step would be to add concrete details from the user wherever possible.
 
 # -----------------------------------------------------------------------------------------------------------------------
 # --- Task 3: Cover Letter Generator ---
@@ -245,12 +250,23 @@ def run_chatbot():
             print("When you're done, type 'DONE' on its own line.\n")
 
             raw_bullets = []
+            unsafe_bullet_found = False
+
             while True:
                 line = input().strip()
                 if line.upper() == "DONE":
                     break
+
                 if line:
+                    if not is_safe(line):
+                        unsafe_bullet_found = True
+                        break
                     raw_bullets.append(line)
+
+            if unsafe_bullet_found:
+                print("\nJob Application Helper: I can't help rewrite unsafe content.")
+                print("Please revise your bullet points and try again.\n")
+                continue
 
             if not raw_bullets:
                 print("\nJob Application Helper: I didn't receive any bullet points.")
@@ -260,12 +276,41 @@ def run_chatbot():
             rewritten = rewrite_bullets(raw_bullets)
 
             print("\nJob Application Helper: Here are your revised bullet points:")
-            for item in rewritten:
-                print(f"\nOriginal: {item['original']}")
-                print(f"Improved: {item['improved']}")
+            assistant_output_lines = ["Here are your revised bullet points:"]
 
-            print("\nPlease review and edit these bullet points before submitting them anywhere.")
-            print("I may not know the exact norms of your industry, so use your own judgment.\n")
+            for item in rewritten:
+                original_line = f"Original: {item['original']}"
+                improved_line = f"Improved: {item['improved']}"
+
+                print(f"\n{original_line}")
+                print(improved_line)
+
+                assistant_output_lines.append(original_line)
+                assistant_output_lines.append(improved_line)
+
+            review_note = (
+                "Please review and edit these bullet points before submitting them anywhere. "
+                "I may not know the exact norms of your industry, so use your own judgment."
+            )
+
+            print(f"\n{review_note}\n")
+            assistant_output_lines.append(review_note)
+
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "Please rewrite these resume bullet points:\n"
+                        + "\n".join(f"- {bullet}" for bullet in raw_bullets)
+                    ),
+                }
+            )
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": "\n".join(assistant_output_lines),
+                }
+            )
 
         # 6. Check if the user wants a cover letter
         elif "cover letter" in user_input.lower():
@@ -277,12 +322,35 @@ def run_chatbot():
                 print("Please review and edit any output before submitting it anywhere.\n")
                 continue
 
+            if not is_safe(job_title) or not is_safe(background):
+                print("\nJob Application Helper: I can't help draft a cover letter from unsafe content.")
+                print("Please revise the job title or background description and try again.\n")
+                continue
+
             opening = generate_cover_letter(job_title, background)
 
             print("\nJob Application Helper: Here's a draft opening paragraph:")
             print(opening)
             print("\nPlease review and edit this paragraph before submitting it anywhere.")
             print("I may not know the exact norms of your industry, so use your own judgment.\n")
+
+            assistant_output = (
+                "Here's a draft opening paragraph:\n"
+                f"{opening}\n\n"
+                "Please review and edit this paragraph before submitting it anywhere. "
+                "I may not know the exact norms of your industry, so use your own judgment."
+            )
+
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"Please draft a cover letter opening for this job title: {job_title}\n"
+                        f"My background: {background}"
+                    ),
+                }
+            )
+            messages.append({"role": "assistant", "content": assistant_output})
 
         # 7. Otherwise, handle it as a regular chat turn
         else:
@@ -298,16 +366,18 @@ def run_chatbot():
 if __name__ == "__main__":
     run_chatbot()
 
-# The chatbot loop worked correctly in all three modes: normal conversation, bullet rewriting, and cover letter generation. 
-# The conversation history grew across chat turns, and the bot correctly remembered earlier details such as
-# the user's name and career transition, which shows that both user and assistant messages were being appended to the messages list.
+# The chatbot loop worked correctly in all three modes: normal conversation, bullet rewriting, and cover letter generation.
+# The conversation history now grows across regular chat turns and across the special bullet rewriting and cover letter branches.
+# This matters because if the user asks a follow-up like "Can you make the second bullet stronger?", the assistant has a summary
+# of the rewritten bullets in the messages list and can use that context instead of treating the next question as disconnected.
 #
 # The bullet rewriting and cover letter features also worked from inside the loop.
-# In both cases, the output was clearly stronger and more professional than the original input, but it still tended to sound somewhat generic 
-# when the source material did not include concrete metrics or examples. 
+# In both cases, the output was clearly stronger and more professional than the original input, but it still tended to sound somewhat generic
+# when the source material did not include concrete metrics or examples.
 # That makes the tool useful as a drafting assistant, but not something a user should submit without careful editing.
 #
-# The moderation check also ran before processing user input, which makes the loop safer and more production-like. 
+# The moderation check now runs both on the initial user request and on the follow-up inputs collected inside the special branches.
+# That means the job title, background description, and each pasted bullet point are screened before being sent to the model.
 # Overall, the chatbot behaves like a coherent job application helper rather than a set of disconnected API calls.
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -150,10 +150,15 @@ print("\n--- Keyword RAG ---")
 print(f"Keyword Q1 selected document: {selected_document_name}")
 
 # Keyword Q1 explanation:
-# The selected document is loyalty.txt because the simple keyword retriever found
-# one overlapping token: "your". The more relevant document should be hours.txt,
-# but the retriever did not match "weekend" from the query with "weekends" in
-# hours.txt, which shows a limitation of basic keyword matching.
+# The selected document is hours.txt because, after stopword filtering, the query
+# still contains "hours" and "weekend". The token "hours" overlaps with hours.txt,
+# giving that document the highest score. The word "your" is a stopword, so it is
+# filtered out before scoring and does not count as an overlap.
+#
+# The retriever still misses part of the user's meaning because it does not match
+# "weekend" from the query with "weekends" in hours.txt. That shows a limitation
+# of basic keyword matching: exact tokens can work, but small word-form changes
+# can still be missed.
 
 # Keyword Q2
 query = "Do you have anything without caffeine?"
@@ -278,7 +283,7 @@ def load_pdf_documents(folder_path):
             documents.append(
                 Document(
                     text=full_text,
-                    metadata={"filename": filename},
+                    metadata={"file_name": filename},
                 )
             )
 
@@ -294,58 +299,30 @@ index = VectorStoreIndex.from_documents(
     embed_model=OpenAIEmbedding(model="text-embedding-3-small"),
 )
 
-retriever = index.as_retriever(similarity_top_k=3)
+query_engine = index.as_query_engine(
+    similarity_top_k=3,
+    llm=LlamaOpenAI(model="gpt-4o-mini"),
+)
 
 client = OpenAI()
 
 for question in questions:
     print(f"\nQuestion: {question}")
 
-    retrieved_nodes = retriever.retrieve(question)
+    response = query_engine.query(question)
 
-    context_chunks = []
-    for node_number, node in enumerate(retrieved_nodes, start=1):
-        chunk_text = node.node.get_content()
-        filename = node.node.metadata.get("filename", "Unknown file")
-        context_chunks.append(chunk_text)
+    print("\nSource nodes:")
+    for node_number, source_node in enumerate(response.source_nodes, start=1):
+        chunk_text = source_node.node.get_content()
+        filename = source_node.node.metadata.get("file_name", "Unknown file")
 
         print(f"\nSource node {node_number}")
         print(f"Source file: {filename}")
-        print(f"Similarity score: {node.score}")
+        print(f"Similarity score: {source_node.score}")
         print(f"Chunk preview: {chunk_text[:150]}")
 
-    context = "\n\n".join(context_chunks)
-
-    prompt = f"""
-Use the context below to answer the question. If the context does not contain
-the answer, say that the answer is not available in the provided context.
-
-Context:
-{context}
-
-Question:
-{question}
-"""
-
-    response = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful assistant that answers using only the provided context.",
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-    )
-
-    answer = response.choices[0].message.content
-
-    print("\nAnswer from the model:")
-    print(answer)
-
+    print("\nAnswer:")
+    print(response)
 
 # LlamaIndex Q1 observations:
 """
@@ -398,7 +375,7 @@ for top_k in [1, 5]:
     context_chunks = []
     for node_number, node in enumerate(retrieved_nodes, start=1):
         chunk_text = node.node.get_content()
-        filename = node.node.metadata.get("filename", "Unknown file")
+        filename = node.node.metadata.get("file_name", "Unknown file")
         context_chunks.append(chunk_text)
 
         print(f"\nSource node {node_number}")
@@ -419,7 +396,7 @@ Question:
 """
 
     response = client.chat.completions.create(
-        model="gpt-4.1-mini",
+        model="gpt-4o-mini",
         messages=[
             {
                 "role": "system",
@@ -471,7 +448,7 @@ context_chunks = []
 
 for node_number, node in enumerate(retrieved_nodes, start=1):
     chunk_text = node.node.get_content()
-    filename = node.node.metadata.get("filename", "Unknown file")
+    filename = node.node.metadata.get("file_name", "Unknown file")
     context_chunks.append(chunk_text)
 
     print(f"\nSource node {node_number}")
@@ -494,7 +471,7 @@ Question:
 """
 
 response = client.chat.completions.create(
-    model="gpt-4.1-mini",
+    model="gpt-4o-mini",
     messages=[
         {
             "role": "system",
@@ -544,7 +521,7 @@ judge_llm = LlamaOpenAI(model="gpt-4o-mini")
 faithfulness_evaluator = FaithfulnessEvaluator(llm=judge_llm)
 relevancy_evaluator = RelevancyEvaluator(llm=judge_llm)
 
-query_engine = index.as_query_engine(
+evaluation_query_engine = index.as_query_engine(
     similarity_top_k=3,
     llm=LlamaOpenAI(model="gpt-4o-mini"),
 )
@@ -557,7 +534,7 @@ evaluation_queries = [
 for eval_query in evaluation_queries:
     print(f"\nEvaluation query: {eval_query}")
 
-    response = query_engine.query(eval_query)
+    response = evaluation_query_engine.query(eval_query)
 
     print("\nResponse:")
     print(response)

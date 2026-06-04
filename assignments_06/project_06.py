@@ -111,7 +111,7 @@ more direct answer.
 
 # --- Step 5: Find a Failure ---
 
-failure_question = "What is the Wi-Fi password at Groundwork Coffee?"
+failure_question = "Can I reserve the private room at Groundwork Coffee for a 40-person event next Friday?"
 
 print("\n--- Step 5: Find a Failure ---")
 print(f"\nQuestion: {failure_question}")
@@ -136,28 +136,58 @@ for node_number, source_node in enumerate(failure_response.source_nodes, start=1
 
 # Step 5 failure reflection:
 """
-I asked: "What is the Wi-Fi password at Groundwork Coffee?"
+I asked: "Can I reserve the private room at Groundwork Coffee for a 40-person
+event next Friday?"
 
-I expected this to be hard because it is a realistic customer question, but the
-provided documents do not appear to contain the actual Wi-Fi password.
+I expected this to be difficult because the question combines information the
+documents may partially cover with information they likely do not cover. The
+documents mention catering or event-related services, but they do not provide a
+reservation calendar, private room availability, or a policy for booking a
+specific date.
 
-The retrieved source nodes came from our_story.txt, menu.txt, and faq.txt. These
-documents are about the company's background, menu, hours, locations, and other
-general information, but the retrieved previews did not include a Wi-Fi password.
+This is a better failure case than asking for the Wi-Fi password because the FAQ
+actually says customers should ask a barista for the current Wi-Fi password. In
+that case, the model's answer was supported by the documents. Here, however, a
+confident "yes" would go beyond the retrieved evidence.
 
-The assistant did not invent a specific password, which is good. However, it
-still guessed that the customer can ask a barista for the current password. That
-sounds reasonable, but it is not directly supported by the retrieved documents.
-This is a subtle failure: the model's answer sounds helpful and confident even
-though the evidence is missing.
+A good answer should separate what is supported from what is missing. For
+example, it could say that Groundwork offers catering for events of 20 people or
+more if that appears in the retrieved context, but it should also say that the
+documents do not confirm whether there is a private room or whether it is
+available next Friday.
+
+The actual response was better than a simple hallucination because it did not
+claim that the room was available. However, it still could not fully answer the
+user's real question because the retrieved documents do not include private room
+availability or a reservation calendar.
 
 This suggests that AI-generated responses can sound trustworthy even when they
 are filling in gaps. For a customer-facing assistant, I would want the model to
-say something like, "I do not see the Wi-Fi password in the available documents."
+say something like, "I do not see private room availability or reservation
+details in the available documents."
 
 To improve the system, I would use a stricter prompt that requires the assistant
 to answer only from the retrieved context and explicitly say when information is
-missing. I would also add a more complete FAQ document with Wi-Fi, parking,
-accessibility, reservations, and other common customer questions.
+missing. I would also add a more complete FAQ or reservations document with room
+availability, booking rules, event capacity, parking, accessibility, and other
+common customer questions.
 """
 
+# --- Step 6: Reflection ---
+
+"""
+The LlamaIndex version required about 8 lines for the core RAG setup: one line
+to load the documents, four lines to build the vector index with an embedding
+model, and three lines to create the query engine with similarity_top_k and the
+LLM.
+
+That is much shorter than the manual semantic RAG pipeline from the warmup,
+which required roughly 40-50 lines to load files, create embeddings, compute
+similarities, sort the results, assemble context, build a prompt, call the model,
+and print source information.
+
+The main advantage of LlamaIndex is that it packages the common RAG workflow into
+a small, readable pipeline. The tradeoff is that some details are hidden, so it is
+still important to inspect source nodes and understand what the query engine is
+retrieving.
+"""

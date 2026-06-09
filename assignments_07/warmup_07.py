@@ -52,17 +52,20 @@ def celsius_to_fahrenheit(celsius: float) -> str:
 
 
 celsius_to_fahrenheit_schema = {
-    "name": "celsius_to_fahrenheit",
-    "description": "Convert a Celsius temperature to Fahrenheit and return it as a formatted string.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "celsius": {
-                "type": "number",
-                "description": "The temperature in degrees Celsius.",
+    "type": "function",
+    "function": {
+        "name": "celsius_to_fahrenheit",
+        "description": "Convert a Celsius temperature to Fahrenheit and return it as a formatted string.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "celsius": {
+                    "type": "number",
+                    "description": "The temperature in degrees Celsius.",
+                },
             },
+            "required": ["celsius"],
         },
-        "required": ["celsius"],
     },
 }
 
@@ -170,18 +173,13 @@ print(q2_result)
 # Q3
 # ------------------------------------------------------------------------------------------
 
-celsius_to_fahrenheit_tool_schema = {
-    "type": "function",
-    "function": celsius_to_fahrenheit_schema,
-}
-
 def run_agent(user_message: str) -> str:
     """Run a simple agent with get_current_time and celsius_to_fahrenheit tools."""
     client = OpenAI()
 
     tools = [
         get_current_time_schema,
-        celsius_to_fahrenheit_tool_schema,
+        celsius_to_fahrenheit_schema,
     ]
 
     messages = [
@@ -393,7 +391,12 @@ class CsvManager:
         if missing:
             return {"error": f"These columns are not in the data: {missing}"}
 
-        pearson_r, p_value = pearsonr(self.df[col1], self.df[col2])
+        clean_data = self.df[[col1, col2]].dropna()
+
+        if len(clean_data) < 2:
+            return {"error": "Not enough non-missing data to compute correlation."}
+
+        pearson_r, p_value = pearsonr(clean_data[col1], clean_data[col2])
 
         return {
             "col1": col1,
@@ -648,7 +651,9 @@ print("Q4 response:")
 print(q4_response)
 
 # Q4 reflection:
-# I added compute_correlation as a new CsvManager method, added its JSON schema entry to tools_schema, and added it to node_tools. 
+# I added compute_correlation as a new CsvManager method, added its JSON schema entry to tools_schema, and added it to node_tools.
+# This Q4 run is a general test of the new correlation tool using avg_speed_kmh and avg_heart_rate.
+# It is not the exact failing lesson scenario; Q5 recreates that scenario with avg_traffic_density and avg_speed_kmh.
 # This gives the agent a real tool for correlation instead of forcing it to guess or hit the tool-round limit.
 
 # Q5
@@ -794,6 +799,12 @@ def smol_plot_data(y: str, x: str | None = None, plot_type: str = "line") -> str
     """
     return csv_backend.plot_data(y=y, x=x, plot_type=plot_type)
 
+# Note on shared state:
+# All smolagents tools below call the same csv_backend instance used by the earlier manual ReAct agent. 
+# The CodeAgent also receives that same csv_backend through additional_args. 
+# This means the agents share mutable state: if one agent loads a CSV, the other agent can see that loaded DataFrame.
+# This is acceptable for this warmup, but in a production system I would prefer
+# separate CsvManager instances or a stateless design to avoid hidden coupling.
 
 TOOLS = [
     smol_list_csv_files,

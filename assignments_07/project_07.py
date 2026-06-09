@@ -187,6 +187,12 @@ def get_top_n_countries(column: str, year: int, n: int = 5) -> dict:
     if "Country" not in df.columns:
         return {"error": "The dataset does not contain a 'Country' column."}
 
+    # Design note:
+    # This tool assumes the merged dataset keeps the country column as "Country"
+    # with title case, which matches the system prompt and current CSV. 
+    # A more robust version could accept both "Country" and "country" or normalize column
+    # names in load_happiness_data.
+
     year_data = df[df["year"] == year]
 
     if year_data.empty:
@@ -244,6 +250,13 @@ map them to the actual column names before calling tools.
 
 Be concise and student-friendly in your responses.
 """
+# Design note:
+# This project uses prompt instructions to map user-friendly snake_case names
+# such as happiness_score and gdp_per_capita to the dataset's title-style column
+# names. That is simple and keeps the original CSV unchanged, but it is fragile
+# because the model might forget the mapping. A more robust production design
+# would normalize column names in load_happiness_data so tools and agent prompts
+# always use one consistent naming convention.
 
 agent = CodeAgent(
     tools=[
@@ -306,14 +319,18 @@ def run_custom_queries() -> None:
     """Run two additional project queries."""
     print("\n--- Task 4: Your Own Questions ---")
 
-    my_query_1 = "Show me the top 10 countries by GDP per capita in 2020."
+    my_query_1 = (
+        "Create a correlation matrix heatmap for the numeric columns in the happiness dataset. "
+        "Save it to outputs/happiness_correlation_matrix.png."
+    )
     print(f"\n--- My Query 1: {my_query_1} ---")
     response_1 = agent.run(my_query_1, reset=False)
     print(response_1)
     # Comment:
-    # I expected this query to trigger tool use because get_top_n_countries can
-    # rank countries by a chosen column for a chosen year. The agent should map
-    # "GDP per capita" to the correct dataset column and call the ranking tool.
+    # I expected this query to trigger code generation because none of the tools
+    # can compute and plot a full correlation matrix. The agent needs to read the
+    # dataset, select numeric columns, compute correlations with pandas, create a
+    # matplotlib heatmap, and save it to the outputs directory.
 
     my_query_2 = (
         "Create a bar chart of the average happiness_score by region for 2020. "

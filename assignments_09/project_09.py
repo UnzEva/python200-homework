@@ -2,7 +2,7 @@
 Week 9 Project: Extract + Load Pipeline
 
 Video link:
-TODO: paste video link here after recording.
+TODO: https://drive.google.com/file/d/1kgjPsG89HOf0mdOA28tURZT9fKR4-tCN/view?usp=sharing
 
 This script extracts 7 days of hourly weather data from the Open-Meteo API,
 serializes the response as JSON, uploads it to Azure Blob Storage, lists blobs

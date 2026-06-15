@@ -2,7 +2,7 @@
 Week 11 Capstone: Cloud ETL Pipeline
 
 Video link:
-TODO: paste video link here after recording.
+https://drive.google.com/file/d/1-ISjbri3xfMU3cmCq5qmpTYMpflQSea9/view?usp=sharing
 
 This script runs a complete Prefect-orchestrated ETL pipeline:
 1. Extract weather data from the Open-Meteo API.

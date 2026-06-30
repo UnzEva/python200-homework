@@ -59,7 +59,7 @@ def extract_weather_data(latitude: float = LATITUDE, longitude: float = LONGITUD
 
 def serialize_weather_data(weather_data: dict) -> bytes:
     """Convert the weather API response to UTF-8 JSON bytes."""
-    return json.dumps(weather_data, indent=2).encode("utf-8")
+    return json.dumps(weather_data).encode("utf-8")
 
 
 def upload_weather_json(container_client, data: bytes) -> str:
@@ -111,6 +111,7 @@ def main() -> None:
     serialized_data = serialize_weather_data(weather_data)
 
     blob_path = upload_weather_json(container_client, serialized_data)
+    print(f"\nPipeline complete. Blob path: {blob_path}")
 
     list_blobs(container_client)
 

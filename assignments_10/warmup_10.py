@@ -35,27 +35,17 @@ not require language understanding.
 
 # Q2
 """
-The prompt "Summarize this product review in a few sentences" creates a
-downstream pipeline problem because the output is freeform text. The length,
-format, wording, and structure may vary from one call to another, which makes it
-hard to parse, validate, store in a table, or monitor for quality.
+A better prompt would keep the same task, but make the output structured and
+pipeline-friendly:
 
-A better pipeline prompt would require a small, consistent JSON object:
+Summarize the customer review in one or two sentences. Return only valid JSON in
+this exact format:
 
-System prompt:
-You are a data transformation step in an ETL pipeline. Return only valid JSON.
-Do not include markdown, commentary, or extra text.
-
-User prompt:
-Summarize the product review and return exactly this JSON schema:
 {
-  "summary": "one sentence summary of the review",
-  "sentiment": "positive | neutral | negative",
-  "main_issue": "short phrase or null"
+  "summary": "short summary here"
 }
 
-Review:
-<review text here>
+Do not include markdown, extra text, or any fields other than summary.
 """
 
 
@@ -79,36 +69,34 @@ the beginning.
 
 # Q1
 """
-An organization might use Azure OpenAI instead of the public OpenAI API because:
+A company might use Azure OpenAI instead of the regular OpenAI API because of
+data residency, enterprise governance, and Azure integration.
 
-1. Enterprise governance and security:
-Azure OpenAI can be managed inside the organization's Azure environment, using
-Azure role-based access control, private networking options, monitoring, and
-existing compliance processes.
+Data residency means the company's API requests and data stay within Azure's
+infrastructure instead of being sent directly to OpenAI's public API. This can be
+important for regulated industries such as healthcare, finance, education, or
+government.
 
-2. Procurement and data residency requirements:
-Many organizations already buy and manage cloud services through Azure. Azure
-OpenAI lets them use OpenAI models through their existing Azure contracts,
-billing, regional deployments, and enterprise controls.
+Azure OpenAI can also fit better into existing enterprise controls, such as
+Azure role-based access control, networking, logging, compliance policies, and
+centralized billing or procurement.
 """
 
 
 # Q2
 """
-When switching from OpenAI to AzureOpenAI, the client initialization uses these
-Azure-specific parameters:
+The main Azure-specific parameters when creating an AzureOpenAI client are
+azure_endpoint and api_version.
 
-1. azure_endpoint:
-The URL of the organization's Azure OpenAI resource, such as
-https://my-resource.openai.azure.com/.
+azure_endpoint tells the SDK which Azure OpenAI resource to call, for example:
+https://my-resource.openai.azure.com/
 
-2. api_version:
-The Azure OpenAI API version to call. Azure OpenAI uses versioned API endpoints,
-so the client must know which service API version to target.
+api_version tells the SDK which Azure OpenAI API version to use.
 
-3. azure_deployment:
-The name of the deployed model inside the Azure OpenAI resource. This is the
-deployment name chosen in Azure, not necessarily the base model name.
+The deployment name is also required when making a request, but it is usually
+passed as the model parameter in chat.completions.create(). Some SDK versions
+also allow azure_deployment to be set at client initialization as a default, but
+I would treat the deployment name separately from the core client setup.
 """
 
 

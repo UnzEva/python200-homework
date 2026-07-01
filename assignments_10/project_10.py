@@ -35,8 +35,8 @@ from openai import OpenAI
 ACCOUNT_URL = "https://evgeniiactd2026sa.blob.core.windows.net"
 CONTAINER = "pipeline-data"
 
-RAW_BLOB_PATH = f"raw/{date.today().isoformat()}/weather.json"
-PROCESSED_BLOB_PATH = f"processed/{date.today().isoformat()}/weather_classified.json"
+RAW_BLOB_TEMPLATE = "raw/{today}/weather.json"
+PROCESSED_BLOB_TEMPLATE = "processed/{today}/weather_classified.json"
 
 FALLBACK_PATH = Path("assignments") / "resources" / "weather_raw.json"
 OUTPUTS_DIR = Path("assignments_10") / "outputs"
@@ -62,15 +62,15 @@ def get_container_client():
     return blob_service_client.get_container_client(CONTAINER)
 
 
-def download_raw_weather(container_client) -> dict:
+def download_raw_weather(container_client, raw_blob_path: str) -> dict:
     """Download the Week 9 raw weather JSON, or use fallback data if needed."""
     try:
-        print(f"Reading raw weather data from blob: {RAW_BLOB_PATH}")
-        downloader = container_client.download_blob(RAW_BLOB_PATH)
+        print(f"Reading raw weather data from blob: {raw_blob_path}")
+        downloader = container_client.download_blob(raw_blob_path)
         raw_bytes = downloader.readall()
         return json.loads(raw_bytes.decode("utf-8"))
     except ResourceNotFoundError:
-        print(f"Raw blob not found at {RAW_BLOB_PATH}. Using fallback data.")
+        print(f"Raw blob not found at {raw_blob_path}. Using fallback data.")
         with FALLBACK_PATH.open("r", encoding="utf-8") as file:
             return json.load(file)
 
@@ -122,7 +122,7 @@ def classify_record(client: OpenAI, record: dict) -> str:
 
 def enrich_records(records: list[dict], limit: int = 24) -> list[dict]:
     """Classify the first limit records and add a conditions field."""
-    load_dotenv()
+    
     api_key = os.getenv("OPENAI_API_KEY")
 
     if not api_key:
@@ -145,22 +145,26 @@ def enrich_records(records: list[dict], limit: int = 24) -> list[dict]:
     return enriched_records
 
 
-def upload_processed_records(container_client, records: list[dict]) -> None:
+def upload_processed_records(
+    container_client,
+    records: list[dict],
+    processed_blob_path: str,
+) -> None:
     """Upload enriched records to processed/<today>/weather_classified.json."""
-    data = json.dumps(records, indent=2).encode("utf-8")
+    data = json.dumps(records).encode("utf-8")
 
     container_client.upload_blob(
-        name=PROCESSED_BLOB_PATH,
+        name=processed_blob_path,
         data=data,
         overwrite=True,
     )
 
-    print(f"Uploaded processed data to {PROCESSED_BLOB_PATH} ({len(data)} bytes).")
+    print(f"Uploaded processed data to {processed_blob_path} ({len(data)} bytes).")
 
 
-def download_processed_records(container_client) -> list[dict]:
+def download_processed_records(container_client, processed_blob_path: str) -> list[dict]:
     """Download and parse the processed blob."""
-    downloader = container_client.download_blob(PROCESSED_BLOB_PATH)
+    downloader = container_client.download_blob(processed_blob_path)
     data = downloader.readall()
     return json.loads(data.decode("utf-8"))
 
@@ -177,9 +181,14 @@ def save_first_10_records(records: list[dict]) -> None:
 
 def main() -> None:
     """Run the full LLM transform pipeline."""
+    load_dotenv()
+    today = date.today().isoformat()
+    raw_blob_path = RAW_BLOB_TEMPLATE.format(today=today)
+    processed_blob_path = PROCESSED_BLOB_TEMPLATE.format(today=today)
+    
     container_client = get_container_client()
 
-    weather_data = download_raw_weather(container_client)
+    weather_data = download_raw_weather(container_client, raw_blob_path)
     hourly_records = reshape_hourly_records(weather_data)
 
     print(f"Loaded {len(hourly_records)} hourly records.")
@@ -187,9 +196,16 @@ def main() -> None:
 
     enriched_records = enrich_records(hourly_records, limit=24)
 
-    upload_processed_records(container_client, enriched_records)
+    upload_processed_records(
+        container_client,
+        enriched_records,
+        processed_blob_path,
+    )
 
-    processed_records = download_processed_records(container_client)
+    processed_records = download_processed_records(
+        container_client,
+        processed_blob_path,
+    )
     processed_df = pd.DataFrame(processed_records)
 
     print("\nCondition counts:")

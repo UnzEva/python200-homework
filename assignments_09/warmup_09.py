@@ -13,37 +13,28 @@ from azure.storage.blob import ContainerClient
 
 # Q1
 """
-When I run a Python script locally that uses DefaultAzureCredential, it relies on
-the credentials already available in my local development environment. In this
-week's setup, that means the Azure CLI login session.
+DefaultAzureCredential is a chained credential. It tries several credential
+providers in order until one works. In local development, the most important one
+for this assignment is AzureCliCredential.
 
-Before running the script, I must run:
+AzureCliCredential allows the Python Azure SDK to reuse the session from
+`az login`, so the script can authenticate without hard-coding secrets in the code.
 
-    az login
-
-DefaultAzureCredential tries several authentication methods in order. One of
-those methods is AzureCliCredential, which checks whether the Azure CLI already
-has an authenticated account. If I have successfully run az login, the Python
-script can reuse that login without hardcoding a password or secret.
+This is why running `az login` first matters. After I log in through the Azure
+CLI, DefaultAzureCredential can find that Azure CLI session through
+AzureCliCredential and use it to access Azure resources.
 """
 
 
 # Q2
 """
-A deployed pipeline running on an Azure VM, container, or other cloud service
-should not use az login because there is no human sitting at the terminal to
-open a browser and complete an interactive login. It would also be unsafe and
-fragile to depend on a personal CLI session in production.
+In production, I would not rely on my personal Azure CLI login. 
+A deployed pipeline should use a managed identity or another service identity. 
+Permissions can then be granted to that identity through Azure role-based access control.
 
-Instead, a deployed pipeline normally uses a managed identity or another service
-identity. Azure gives that workload its own identity, and permissions can be
-granted to that identity through role-based access control.
-
-The same Python code can still work without changes because DefaultAzureCredential
-checks multiple credential sources. Locally, it can use AzureCliCredential. In
-Azure, it can use ManagedIdentityCredential. The script still creates
-DefaultAzureCredential, but the credential source changes depending on the
-environment.
+For example, I could assign the Storage Blob Data Contributor role to the managed identity on the storage account 
+so the deployed pipeline can read and write blobs. This is safer than storing credentials in code 
+because access is managed by Azure and can be changed or revoked centrally.
 """
 
 
@@ -59,14 +50,13 @@ AuthenticationError, the two most likely causes are:
        az login
    and then try the script again.
 
-2. The script is logged in but the account or identity does not have permission
-   to access the requested Azure resource.
-   I would diagnose this by checking the exact error message, confirming the
-   active subscription with:
-       az account show
-   and checking whether the signed-in user or managed identity has the needed
-   role assignment, such as Reader for subscription metadata or Storage Blob Data
-   Contributor for blob operations.
+2. A second true authentication cause could be that the managed identity is not enabled on the compute resource, 
+or environment variables such as AZURE_CLIENT_ID, AZURE_TENANT_ID, or AZURE_CLIENT_SECRET are set incorrectly. 
+In that case, DefaultAzureCredential may try a specific credential provider but fail before it ever receives a valid token.
+
+If authentication succeeds but the account does not have permission to the
+storage account, that is an authorization problem instead. It would usually
+appear as a 403 Forbidden or a permissions error after the credential is created.
 """
 
 

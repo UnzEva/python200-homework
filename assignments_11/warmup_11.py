@@ -5,7 +5,8 @@ This file contains conceptual answers and small code snippets for Prefect
 orchestration and production pipeline patterns.
 """
 
-from prefect import task, get_run_logger
+from prefect import task
+from prefect.logging import get_run_logger
 
 
 # --- Prefect Orchestration ---
@@ -29,7 +30,7 @@ the flow simpler and avoids unnecessary Prefect overhead.
 
 
 # Q2
-# @task(retries=3, retry_delay_seconds=30)
+# @task(name="call_api", retries=3, retry_delay_seconds=30)
 
 
 # Q3
@@ -38,6 +39,10 @@ If the Prefect UI shows extract as Completed, transform as Failed, and load neve
 ran, I would open the failed flow run in the Prefect UI and then inspect the
 transform task run. I would look at the task's logs, exception traceback, state,
 inputs/parameters, and timing information.
+
+I would also check the task run details page for the input parameters passed to the transform task. 
+This would help diagnose whether the failure came from an unexpected API response structure 
+or missing fields in the weather_data dictionary.
 
 I would expect to find the specific exception that caused the failure, such as an
 OpenAI API error, parsing error, missing key, invalid response label, or a problem

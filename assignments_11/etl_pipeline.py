@@ -21,9 +21,19 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from prefect import flow, task
 
+load_dotenv()
 
 ACCOUNT_URL = "https://evgeniiactd2026sa.blob.core.windows.net"
 CONTAINER = "pipeline-data"
+
+BLOB_SERVICE_CLIENT = BlobServiceClient(
+    account_url=ACCOUNT_URL,
+    credential=DefaultAzureCredential(),
+)
+
+def get_container_client():
+    """Create and return an Azure Blob Storage ContainerClient."""
+    return BLOB_SERVICE_CLIENT.get_container_client(CONTAINER)
 
 # Charlotte, NC
 LATITUDE = 35.2271
@@ -86,7 +96,6 @@ def classify_record(client: OpenAI, record: dict) -> str:
 @task
 def transform_weather_data(weather_data: dict) -> list[dict]:
     """Reshape hourly weather data and classify the first 24 records."""
-    load_dotenv()
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -133,14 +142,9 @@ def load_weather_data(enriched_records: list[dict]) -> str:
     today = date.today().isoformat()
     blob_path = f"final/{today}/weather_etl.json"
 
-    data = json.dumps(enriched_records, indent=2).encode("utf-8")
+    data = json.dumps(enriched_records).encode("utf-8")
 
-    credential = DefaultAzureCredential()
-    blob_service_client = BlobServiceClient(
-        account_url=ACCOUNT_URL,
-        credential=credential,
-    )
-    container_client = blob_service_client.get_container_client(CONTAINER)
+    container_client = get_container_client()
 
     container_client.upload_blob(
         name=blob_path,
